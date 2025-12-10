@@ -2,12 +2,10 @@ import express from "express";
 import process from "process";
 
 import Rbd from "./rbd";
-import MountPointEntry from "./mountPointEntry";
-
 const socketAddress = "/run/docker/plugins/rbd.sock";
 const pool = process.env.RBD_CONF_POOL || "rbd";
-const cluster = process.env.RBD_CONF_CLUSTER || "ceph"; // ToDo: Not utilised currently
-const user = process.env.RBD_CONF_KEYRING_USER || "swarm"; // ToDo: Not utilised currently
+const cluster = process.env.RBD_CONF_CLUSTER || "ceph"; // ToDo: Not utilized currently
+const user = process.env.RBD_CONF_KEYRING_USER || "swarm"; // ToDo: Not utilized currently
 const order = process.env.RBD_CONF_ORDER || "22"
 const rbd_options = process.env.RBD_CONF_RBD_OPTIONS || "layering,exclusive-lock,object-map,fast-diff,deep-flatten";
 const map_options = process.env.RBD_CONF_MAP_OPTIONS ? process.env.RBD_CONF_MAP_OPTIONS.split(';') : ["--exclusive"]; // default to an exclusive lock when mapping to prevent multiple containers attempting to mount the block device
@@ -25,8 +23,6 @@ app.post("/Plugin.Activate", (request, response) => {
         "Implements": ["VolumeDriver"]
     });
 });
-
-let mountPointTable = new Map<string, MountPointEntry>();
 
 function getMountPoint(name: string): string {
     return `/mnt/volumes/${pool}/${name}`;
@@ -46,13 +42,15 @@ app.post("/VolumeDriver.Create", async (request, response) => {
     console.log(`Creating rbd volume ${req.Name}`);
 
     try {
-        await rbd.create(req.Name, size);
-        let device = await rbd.map(req.Name);
-        await rbd.makeFilesystem(fstype, device, mkfs_options);
-        await rbd.unMap(req.Name);
+        if (await rbd.create(req.Name, size)) {
+            let device = await rbd.map(req.Name);
+            await rbd.makeFilesystem(fstype, device, mkfs_options);
+            await rbd.unMap(req.Name);
+        }
     }
     catch (error) {
-        return response.json({ Err: error.message });
+        const errMsg = (error instanceof Error) ? error.message : String(error);
+        return response.json({ Err: errMsg });
     }
 
     response.json({
@@ -75,7 +73,8 @@ app.post("/VolumeDriver.Remove", async (request, response) => {
         await rbd.remove(req.Name);
     }
     catch (error) {
-        return response.json({ Err: error.message });
+        const errMsg = (error instanceof Error) ? error.message : String(error);
+        return response.json({ Err: errMsg });
     }
 
     response.json({
@@ -95,10 +94,8 @@ app.post("/VolumeDriver.Mount", async (request, response) => {
 
     console.log(`Mounting rbd volume ${req.Name}`);
 
-    if (mountPointTable.has(mountPoint)) {
-        console.log(`${mountPoint} already mounted, nothing to do`);
-        mountPointTable.get(mountPoint).references.push(req.ID);
-
+    if (await rbd.isMounted(mountPoint)) {
+        console.log(`${mountPoint} is already mounted`);
         return response.json({
             MountPoint: mountPoint,
             Err: ""
@@ -112,17 +109,14 @@ app.post("/VolumeDriver.Mount", async (request, response) => {
             device = await rbd.map(req.Name);
         }
 
-        await rbd.mount(device, mountPoint);
+        if (!await rbd.isMounted(mountPoint)) {
+            await rbd.mount(device, mountPoint);
+        }
     }
     catch (error) {
-        return response.json({ Err: error.message });
+        const errMsg = (error instanceof Error) ? error.message : String(error);
+        return response.json({ Err: errMsg });
     }
-
-    mountPointTable.set(mountPoint, 
-        new MountPointEntry( 
-            req.Name, 
-            mountPoint,
-            req.ID));
     
     response.json({
         MountPoint: mountPoint,
@@ -133,20 +127,18 @@ app.post("/VolumeDriver.Mount", async (request, response) => {
 /*
     Request the path to the volume with the given volume_name.
 */
-app.post("/VolumeDriver.Path", (request, response) => {
+app.post("/VolumeDriver.Path", async (request, response) => {
     const req = request.body as { Name: string };
     const mountPoint = getMountPoint(req.Name);
 
     console.log(`Request path of rbd mount ${req.Name}`);
-
-    if (mountPointTable.has(mountPoint)) {
-        response.json({
-            MountPoint: mountPoint,
+    if (await rbd.isMounted(req.Name)) {
+        return response.json({
+            mountPoint: mountPoint,
             Err: ""
         });
-    } else {
-        response.json({ Err: "" });
     }
+    response.json({ Err: `Volume ${req.Name} is not mounted` });
 });
 
 /*
@@ -160,36 +152,23 @@ app.post("/VolumeDriver.Unmount", async (request, response) => {
     const mountPoint = getMountPoint(req.Name);
 
     console.log(`Unmounting rbd volume ${req.Name}`);
-
-    if (!mountPointTable.has(mountPoint)) {
-        const error = `Unknown volume ${req.Name}`;
-        console.error(error);
-        return response.json({ Err: error });
+    if (await rbd.isMounted(req.Name)) {
+        try {
+            await rbd.unmount(mountPoint);
+        }
+        catch (error) {
+            const errMsg = (error instanceof Error) ? error.message : String(error);
+            return response.json({ Err: errMsg });
+        }
     }
-
-    let mountPointEntry = mountPointTable.get(mountPoint);
-
-    if (!mountPointEntry.hasReference(req.ID)) {
-        const error = `Unknown caller id ${req.ID} for volume ${req.Name}`;
-        console.error(error);
-        return response.json({ Err: error });
-    }
-
-    const remainingIds = mountPointEntry.references.filter(id => id !== req.ID);
-
-    if (remainingIds.length > 0) {
-        console.log(`${remainingIds.length} references to volume ${req.Name} remaining, not unmounting..`);
-        mountPointEntry.references = remainingIds;
-        return response.json({ Err: "" });
-    } 
-
-    try {
-        await rbd.unmount(mountPoint);
-        mountPointTable.delete(mountPoint);
-        await rbd.unMap(req.Name);
-    }
-    catch (error) {
-        return response.json({ Err: error.message });
+    if (await rbd.isMapped(req.Name)) {
+        try {
+            await rbd.unMap(req.Name);
+        }
+        catch (error) {
+            const errMsg = (error instanceof Error) ? error.message : String(error);
+            return response.json({ Err: errMsg });
+        }
     }
 
     response.json({
@@ -203,9 +182,6 @@ app.post("/VolumeDriver.Unmount", async (request, response) => {
 app.post("/VolumeDriver.Get", async (request, response) => {
     const req = request.body as { Name: string };
     const mountPoint = getMountPoint(req.Name);
-    const entry = mountPointTable.has(mountPoint) 
-        ? mountPointTable.get(mountPoint)
-        : null;
 
     console.log(`Getting info about rbd volume ${req.Name}`);
 
@@ -219,7 +195,7 @@ app.post("/VolumeDriver.Get", async (request, response) => {
         response.json({
             Volume: {
                 Name: req.Name,
-                Mountpoint: entry?.mountPoint || "",
+                Mountpoint: mountPoint,
                 Status: {
                     size: info.size
                 }
@@ -227,7 +203,8 @@ app.post("/VolumeDriver.Get", async (request, response) => {
             Err: ""
         });
     } catch (error) {
-        return response.json({ Err: error.message });
+        const errMsg = (error instanceof Error) ? error.message : String(error);
+        return response.json({ Err: errMsg });
     }
 });
 
@@ -242,21 +219,16 @@ app.post("/VolumeDriver.List", async (request, response) => {
 
         response.json({
             Volumes: rbdList.map(info => {
-                const mountPoint = getMountPoint(info.image);
-                const entry = mountPointTable.has(mountPoint) 
-                    ? mountPointTable.get(mountPoint)
-                    : null;
-    
                 return {
-                    Name: name,
-                    Mountpoint: entry?.mountPoint || ""
+                    Name: info.image,
                 };
             }),
             Err: ""
-          });
+        });
     }
     catch (error) {
-        return response.json({ Err: error.message });
+        const errMsg = (error instanceof Error) ? error.message : String(error);
+        return response.json({ Err: errMsg });
     }
 });
 
@@ -265,9 +237,9 @@ app.post("/VolumeDriver.Capabilities", (request, response) => {
 
     response.json({
         Capabilities: {
-          Scope: "global"
+            Scope: "global"
         }
-      });
+    });
 });
 
 
