@@ -2,6 +2,7 @@ import express from "express";
 import process from "process";
 
 import Rbd from "./rbd";
+import ReferenceTable from "./referenceTable";
 const socketAddress = "/run/docker/plugins/rbd.sock";
 const pool = process.env.RBD_CONF_POOL || "rbd";
 const cluster = process.env.RBD_CONF_CLUSTER || "ceph"; // ToDo: Not utilized currently
@@ -10,6 +11,7 @@ const order = process.env.RBD_CONF_ORDER || "22"
 const rbd_options = process.env.RBD_CONF_RBD_OPTIONS || "layering,exclusive-lock,object-map,fast-diff,deep-flatten";
 const map_options = process.env.RBD_CONF_MAP_OPTIONS ? process.env.RBD_CONF_MAP_OPTIONS.split(';') : ["--exclusive"]; // default to an exclusive lock when mapping to prevent multiple containers attempting to mount the block device
 const rbd = new Rbd({ pool: pool, cluster: cluster, user: user, map_options: map_options, order: order, rbd_options: rbd_options});
+const referenceTable = new ReferenceTable();
 
 const app = express();
 app.use(express.json({ strict: false, type: req => true }));
@@ -100,6 +102,7 @@ app.post("/VolumeDriver.Mount", async (request, response) => {
 
     if (await rbd.isMounted(mountPoint)) {
         console.log(`${mountPoint} is already mounted`);
+        referenceTable.add(req.Name, req.ID);
         return response.json({
             MountPoint: mountPoint,
             Err: ""
@@ -116,6 +119,7 @@ app.post("/VolumeDriver.Mount", async (request, response) => {
         if (!await rbd.isMounted(mountPoint)) {
             await rbd.mount(device, mountPoint);
         }
+        referenceTable.add(req.Name, req.ID);
     }
     catch (error) {
         const errMsg = (error instanceof Error) ? error.message : String(error);
@@ -156,6 +160,19 @@ app.post("/VolumeDriver.Unmount", async (request, response) => {
     const mountPoint = getMountPoint(req.Name);
 
     console.log(`Unmounting rbd volume ${req.Name}`);
+
+    const removal = referenceTable.remove(req.Name, req.ID);
+
+    if (removal.remaining > 0) {
+        console.log(`Keeping rbd volume ${req.Name} mounted; ${removal.remaining} consumers still active`);
+        return response.json({ Err: "" });
+    }
+
+    if (!removal.removed) {
+        console.log(`Unmount requested for ${req.Name} with unknown ID ${req.ID}; skipping teardown to avoid disrupting other consumers`);
+        return response.json({ Err: "" });
+    }
+
     if (await rbd.isMounted(mountPoint)) {
         try {
             await rbd.unmount(mountPoint);
