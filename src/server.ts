@@ -69,6 +69,10 @@ app.post("/VolumeDriver.Remove", async (request, response) => {
     console.log(`Removing rbd volume ${req.Name}`);
 
     try {
+        const mountPoint = getMountPoint(req.Name);
+        if (await rbd.isMounted(mountPoint)) {
+            await rbd.unmount(mountPoint);
+        }
         await rbd.unMap(req.Name);
         await rbd.remove(req.Name);
     }
@@ -132,9 +136,9 @@ app.post("/VolumeDriver.Path", async (request, response) => {
     const mountPoint = getMountPoint(req.Name);
 
     console.log(`Request path of rbd mount ${req.Name}`);
-    if (await rbd.isMounted(req.Name)) {
+    if (await rbd.isMounted(mountPoint)) {
         return response.json({
-            mountPoint: mountPoint,
+            MountPoint: mountPoint,
             Err: ""
         });
     }
@@ -152,7 +156,7 @@ app.post("/VolumeDriver.Unmount", async (request, response) => {
     const mountPoint = getMountPoint(req.Name);
 
     console.log(`Unmounting rbd volume ${req.Name}`);
-    if (await rbd.isMounted(req.Name)) {
+    if (await rbd.isMounted(mountPoint)) {
         try {
             await rbd.unmount(mountPoint);
         }

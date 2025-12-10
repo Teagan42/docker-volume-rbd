@@ -1,79 +1,98 @@
 {
-	"description": "Ceph rbd plugin for Docker",
-	"documentation": "https://github.com/ajanis/docker-volume-rbd",
-    "entrypoint": ["/app/entrypoint.sh"],
-    "env": [
-        {
-            "name": "RBD_CONF_POOL",
-            "settable": ["value"]
-        },
-        {
-            "name": "RBD_CONF_CLUSTER",
-            "settable": ["value"]
-        },
-        {
-            "name": "RBD_CONF_KEYRING_USER",
-            "settable": ["value"]
-        },
-        {
-            "name": "RBD_CONF_MAP_OPTIONS",
-            "settable": ["value"]
-        },
-        {
-            "name": "RBD_CONF_RBD_OPTIONS",
-            "settable": ["value"]
-        },
-        {
-            "name": "RBD_CONF_ORDER",
-            "settable": ["value"]
-        }
-    ],
-    "network": {
-        "type": "host"
+  "description": "Ceph rbd plugin for Docker",
+  "documentation": "https://github.com/ajanis/docker-volume-rbd",
+  "entrypoint": [
+    "/app/entrypoint.sh"
+  ],
+  "env": [
+    {
+      "name": "RBD_CONF_POOL",
+      "settable": [
+        "value"
+      ]
     },
-	"interface" : {
-        "types": ["docker.volumedriver/1.0"],
-        "socket": "rbd.sock"
-	},
-	"linux": {
-        "AllowAllDevices": true,
-        "capabilities": ["CAP_SYS_ADMIN", "CAP_SYS_MODULE"],
-        "devices": null
+    {
+      "name": "RBD_CONF_CLUSTER",
+      "settable": [
+        "value"
+      ]
     },
-    "mounts": [
-        {
-          "source": "/lib/modules",
-          "destination": "/lib/modules",
-          "type": "bind",
-          "options": [
-            "rbind"
-          ]
-        },
-        {
-          "source": "/dev",
-          "destination": "/dev",
-          "type": "bind",
-          "options": [
-            "shared",
-            "rbind"
-          ]
-        },
-        {
-          "source": "/etc/ceph",
-          "destination": "/etc/ceph",
-          "type": "bind",
-          "options": [
-            "rbind"
-          ]
-        },
-        {
-          "source": "/sys",
-          "destination": "/sys",
-          "type": "bind",
-          "options": [
-            "rbind"
-          ]
-        }
+    {
+      "name": "RBD_CONF_KEYRING_USER",
+      "settable": [
+        "value"
+      ]
+    },
+    {
+      "name": "RBD_CONF_MAP_OPTIONS",
+      "settable": [
+        "value"
+      ]
+    },
+    {
+      "name": "RBD_CONF_RBD_OPTIONS",
+      "settable": [
+        "value"
+      ]
+    },
+    {
+      "name": "RBD_CONF_ORDER",
+      "settable": [
+        "value"
+      ]
+    }
+  ],
+  "network": {
+    "type": "host"
+  },
+  "interface": {
+    "types": [
+      "docker.volumedriver/1.0"
     ],
-    "propagatedmount": "/mnt/volumes"
+    "socket": "rbd.sock"
+  },
+  "linux": {
+    "AllowAllDevices": true,
+    "capabilities": [
+      "CAP_SYS_ADMIN",
+      "CAP_SYS_MODULE"
+    ],
+    "devices": null
+  },
+  "mounts": [
+    {
+      "source": "/lib/modules",
+      "destination": "/lib/modules",
+      "type": "bind",
+      "options": [
+        "rbind"
+      ]
+    },
+    {
+      "source": "/dev",
+      "destination": "/dev",
+      "type": "bind",
+      "options": [
+        "shared",
+        "rbind"
+      ]
+    },
+    {
+      "source": "/etc/ceph",
+      "destination": "/etc/ceph",
+      "type": "bind",
+      "options": [
+        "rbind"
+      ]
+    },
+    {
+      "source": "/sys",
+      "destination": "/sys",
+      "type": "bind",
+      "options": [
+        "rbind"
+      ]
+    }
+  ],
+  "propagatedmount": "/mnt/volumes"
 }

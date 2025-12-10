@@ -1,20 +1,31 @@
 {
-    "compilerOptions": {
-        "module": "commonjs",
-        "esModuleInterop": true,
-        "target": "es6",
-        "types": ["node"],
-        // "moduleResolution": "node10",
-        "noImplicitAny": true,
-        "removeComments": true,
-        "preserveConstEnums": true,
-        "outDir": "dist",
-        "sourceMap": true,
-        "strict": true,
-        "strictNullChecks": true,
-    },
-    "lib": ["es2015"],
-    "include": [
-        "src/**/*"
-    ]
+  "compilerOptions": {
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "target": "es6",
+    "types": [
+      "node",
+      "jest"
+    ],
+    // "moduleResolution": "node10",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "outDir": "dist",
+    "sourceMap": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "plugins": [
+      {
+        "transform": "typia/lib/transform"
+      }
+    ],
+    "skipLibCheck": true
+  },
+  "lib": [
+    "es2015"
+  ],
+  "include": [
+    "src/**/*"
+  ]
 }

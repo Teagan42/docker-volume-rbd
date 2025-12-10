@@ -30,17 +30,29 @@ interface RBDListEntry {
     format: number,
 }
 
-const rbdShowMapped = typia.createValidate<RBDMapEntry[]>();
-const rbdList = typia.createValidate<RBDListEntry[]>();
+const rbdShowMapped = typia.json.createValidateParse<RBDMapEntry[]>();
+const rbdList = typia.json.createValidateParse<RBDListEntry[]>();
 
 export default class Rbd {
     // ToDo: Actually used the passed in options for cluster and user
     constructor(readonly options: RBDOptions) { }
 
+    private rbdBaseArgs(): string[] {
+        const args: string[] = [];
+        if (this.options.cluster) {
+            args.push("--cluster", this.options.cluster);
+        }
+        if (this.options.user) {
+            args.push("--id", this.options.user);
+        }
+        return args;
+    }
+
     async isMapped(name: string): Promise<string | null> {    
         try {
             const { stdout, stderr } = await execFile(
                 "rbd", [
+                    ...this.rbdBaseArgs(),
                     "showmapped",
                     "--format",
                     "json"
@@ -84,6 +96,7 @@ export default class Rbd {
         try {
             const { stdout, stderr } = await execFile(
                 "rbd", [
+                    ...this.rbdBaseArgs(),
                     "map",
                     ...this.options.map_options,
                     "--pool", 
@@ -118,6 +131,7 @@ export default class Rbd {
         try {
             const { stdout, stderr } = await execFile(
                 "rbd", [
+                    ...this.rbdBaseArgs(),
                     "unmap",
                     "--pool",
                     this.options.pool,
@@ -148,6 +162,7 @@ export default class Rbd {
         try {
             const { stdout, stderr } = await execFile(
                 "rbd", [
+                    ...this.rbdBaseArgs(),
                     "list",
                     "--pool",
                     this.options.pool,
@@ -189,6 +204,7 @@ export default class Rbd {
             ] : []
             const { stdout, stderr } = await execFile(
                 "rbd", [
+                    ...this.rbdBaseArgs(),
                     "create",
                     "--order",
                     this.options.order,
@@ -216,7 +232,7 @@ export default class Rbd {
 
     async makeFilesystem(fstype: string, device: string, mkfs_options: string ) {
         try {
-            const extraArgs = mkfs_options? ["fs-options", ...mkfs_options.split(' ')] : []
+            const extraArgs = mkfs_options ? ["fs-options", ...mkfs_options.split(' ')] : []
             const { stdout, stderr } = await execFile(
                 "mkfs", [
                     "-t",
@@ -278,11 +294,10 @@ export default class Rbd {
     }
 
     async mount(device: string, mountPoint: string): Promise<void> {
-        await mkdir(mountPoint, { recursive: true });
         try {
             await this.unmount(mountPoint, false);
         } catch {}
-
+        await mkdir(mountPoint, { recursive: true });
         try {
             const { stdout, stderr } = await execFile(
                 "mount", [
